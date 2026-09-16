@@ -1,0 +1,2187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentryBar — Native macOS Menu Bar Hardware Telemetry</title>
+  <meta name="description" content="Native macOS menu-bar hardware telemetry and system control utility for Apple Silicon. Built in Swift & SwiftUI with autonomous AI agent engineering.">
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* -------------------------------------------------------------
+       DESIGN SYSTEM & CSS VARIABLES
+       ------------------------------------------------------------- */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
+      --font-display: 'Outfit', var(--font-sans);
+      --font-mono: 'Fira Code', SFMono-Regular, Consolas, Monaco, monospace;
+
+      /* Colors */
+      --bg-base: #0c0d14;
+      --bg-surface-1: rgba(20, 23, 34, 0.7);
+      --bg-surface-2: rgba(30, 34, 48, 0.6);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(255, 255, 255, 0.15);
+
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      /* Apple Native Accent Colors from Screenshot */
+      --apple-blue: #007aff;
+      --apple-blue-hover: #0062cc;
+      --apple-green: #34c759;
+      --apple-red: #ff3b30;
+      --apple-purple: #af52de;
+      --apple-amber: #ff9500;
+
+      /* Native App Panel Colors */
+      --app-popover-bg: #1c1a1f;
+      --app-card-bg: rgba(255, 255, 255, 0.05);
+      --app-card-border: rgba(255, 255, 255, 0.08);
+      --app-seg-bg: rgba(255, 255, 255, 0.09);
+
+      --card-radius: 18px;
+      --pill-radius: 9999px;
+      --transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      --glass-blur: blur(28px) saturate(190%);
+    }
+
+    [data-theme="light"] {
+      --bg-base: #eef2f7;
+      --bg-surface-1: rgba(255, 255, 255, 0.85);
+      --bg-surface-2: rgba(240, 244, 250, 0.9);
+      --border-subtle: rgba(0, 0, 0, 0.08);
+      --border-highlight: rgba(0, 0, 0, 0.14);
+
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      line-height: 1.6;
+      position: relative;
+    }
+
+    /* Ambient Dynamic Mesh Glow */
+    .ambient-bg {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .ambient-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(140px);
+      opacity: 0.26;
+      animation: float 22s infinite alternate ease-in-out;
+    }
+    .orb-1 { width: 650px; height: 650px; background: #3b82f6; top: -120px; left: -100px; }
+    .orb-2 { width: 550px; height: 550px; background: #06b6d4; top: 35%; right: -120px; animation-delay: -6s; }
+    .orb-3 { width: 750px; height: 750px; background: #8b5cf6; bottom: -200px; left: 25%; animation-delay: -12s; }
+
+    @keyframes float {
+      0% { transform: translateY(0) scale(1); }
+      100% { transform: translateY(70px) scale(1.1); }
+    }
+
+    /* -------------------------------------------------------------
+       NAVIGATION
+       ------------------------------------------------------------- */
+    .site-nav {
+      position: sticky;
+      top: 16px;
+      z-index: 100;
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-surface-1);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--pill-radius);
+      padding: 0.65rem 1.4rem;
+      box-shadow: 0 10px 35px -10px rgba(0, 0, 0, 0.4);
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #007aff, #00c6ff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.1rem;
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.6rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.92rem;
+      font-weight: 500;
+      transition: var(--transition);
+    }
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--pill-radius);
+      padding: 0.45rem 0.85rem;
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      transition: var(--transition);
+    }
+    .theme-toggle:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    /* -------------------------------------------------------------
+       BUTTONS & BADGES
+       ------------------------------------------------------------- */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.6rem;
+      border-radius: var(--pill-radius);
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: var(--transition);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--apple-blue), #0056b3);
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(0, 122, 255, 0.4);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 122, 255, 0.55);
+    }
+    .btn-secondary {
+      background: var(--bg-surface-2);
+      color: var(--text-primary);
+      border: 1px solid var(--border-highlight);
+      backdrop-filter: var(--glass-blur);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-2px);
+    }
+    .btn-coffee {
+      background: #ffdd00;
+      color: #1a1a1a;
+      font-weight: 700;
+      box-shadow: 0 4px 15px rgba(255, 221, 0, 0.25);
+    }
+    .btn-coffee:hover {
+      background: #ffe333;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 221, 0, 0.4);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: var(--pill-radius);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .badge-blue {
+      background: rgba(0, 122, 255, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(0, 122, 255, 0.35);
+    }
+    .badge-agent {
+      background: rgba(175, 82, 222, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(175, 82, 222, 0.35);
+    }
+
+    /* -------------------------------------------------------------
+       HERO SECTION
+       ------------------------------------------------------------- */
+    .hero {
+      padding: 4.5rem 1.5rem 2.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .hero-eyebrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 5.2vw, 4.2rem);
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.2rem;
+    }
+    .text-gradient {
+      background: linear-gradient(135deg, #ffffff 20%, #94a3b8 55%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    [data-theme="light"] .text-gradient {
+      background: linear-gradient(135deg, #0f172a 20%, #1e293b 55%, #0284c7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-lead {
+      font-size: clamp(1.05rem, 1.8vw, 1.25rem);
+      color: var(--text-secondary);
+      max-width: 760px;
+      margin: 0 auto 2.2rem;
+      font-weight: 400;
+    }
+    .hero-cta {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2.2rem;
+    }
+    .meta-specs {
+      display: flex;
+      justify-content: center;
+      gap: 1.8rem;
+      flex-wrap: wrap;
+      font-size: 0.86rem;
+      color: var(--text-muted);
+    }
+
+    /* -------------------------------------------------------------
+       NATIVE SIMULATOR (PIXEL-PERFECT REPLICA OF USER DESIGN)
+       ------------------------------------------------------------- */
+    .simulator-section {
+      max-width: 1080px;
+      margin: 2.5rem auto 5rem;
+      padding: 0 1rem;
+    }
+    .simulator-window-frame {
+      background: #12141c;
+      border: 1px solid var(--border-highlight);
+      border-radius: 24px;
+      box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* macOS Top Menu Bar (Matches Screenshot Image 1) */
+    .mac-desktop-menubar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+      padding: 0 1.4rem;
+      background: #1a1d24 url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      user-select: none;
+      font-size: 0.84rem;
+    }
+    .menubar-left {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      color: #cbd5e1;
+    }
+    .menubar-right {
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+
+    /* The EXACT Menu Bar Status Item from Image 1 */
+    .native-menubar-item {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: var(--transition);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .native-menubar-item:hover, .native-menubar-item.active {
+      background: rgba(255, 255, 255, 0.16);
+    }
+    .chip-svg-icon {
+      width: 18px;
+      height: 18px;
+      stroke: #ffffff;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .menubar-item-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+      text-align: left;
+    }
+    .menubar-item-row1 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+    .menubar-item-row2 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    /* Desktop Canvas containing Popover */
+    .desktop-backdrop {
+      padding: 2.5rem 1.5rem 3.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: radial-gradient(circle at top right, rgba(0, 122, 255, 0.12), transparent 65%),
+                  radial-gradient(circle at bottom left, rgba(175, 82, 222, 0.1), transparent 50%),
+                  #0e1017;
+      min-height: 700px;
+    }
+
+    /* The EXACT Popover App Window from Images 2, 3, 4 */
+    .native-app-window {
+      width: 100%;
+      max-width: 400px;
+      background: var(--app-popover-bg);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 25px 55px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
+      color: #ffffff;
+      font-family: var(--font-sans);
+    }
+    /* Top triangle arrow pointer */
+    .popover-pointer {
+      position: absolute;
+      top: -7px;
+      right: 95px;
+      width: 14px;
+      height: 14px;
+      background: var(--app-popover-bg);
+      border-left: 1px solid rgba(255, 255, 255, 0.12);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      transform: rotate(45deg);
+    }
+
+    /* Header: Blue Chip + System Monitor + Gear */
+    .native-window-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.1rem 1.25rem 0.8rem;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .header-chip-icon {
+      width: 18px;
+      height: 18px;
+      stroke: var(--apple-blue);
+      fill: none;
+      stroke-width: 2;
+    }
+    .native-title {
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+    .gear-btn {
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      opacity: 0.85;
+      cursor: pointer;
+      font-size: 1.05rem;
+      transition: var(--transition);
+    }
+    .gear-btn:hover {
+      opacity: 1;
+      transform: rotate(30deg);
+    }
+
+    /* Segmented Tab Bar: [ System | Display | Keyboard ] */
+    .segmented-tabs-container {
+      display: flex;
+      background: var(--app-seg-bg);
+      margin: 0.2rem 1.25rem 0.9rem;
+      border-radius: 8px;
+      padding: 2px;
+      position: relative;
+    }
+    .seg-tab-btn {
+      flex: 1;
+      padding: 0.42rem 0.5rem;
+      font-size: 0.86rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: #ffffff;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: var(--transition);
+      text-align: center;
+      position: relative;
+    }
+    .seg-tab-btn:not(:last-child):not(.active)::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 25%;
+      bottom: 25%;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .seg-tab-btn.active {
+      background: var(--apple-blue);
+      color: #ffffff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Tab Contents Body */
+    .native-tab-pane {
+      display: none;
+      padding: 0 1.25rem 0.5rem;
+      animation: fadeIn 0.18s ease;
+    }
+    .native-tab-pane.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Cards Inside Window */
+    .native-card {
+      background: var(--app-card-bg);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      margin-bottom: 0.75rem;
+      border: 1px solid var(--app-card-border);
+    }
+
+    /* SYSTEM TAB: CPU & Memory Row */
+    .cpu-mem-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.7rem;
+      margin-bottom: 0.75rem;
+    }
+    .metric-sub-title {
+      font-size: 0.74rem;
+      color: #9ca3af;
+      font-weight: 500;
+      margin-bottom: 0.15rem;
+    }
+    .metric-big-val {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }
+    .cpu-sparkline-canvas {
+      width: 100%;
+      height: 38px;
+      margin-top: 0.4rem;
+    }
+    .memory-bar-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      margin-top: 1.5rem;
+      overflow: hidden;
+    }
+    .memory-bar-fill {
+      width: 60.5%;
+      height: 100%;
+      background: #af52de;
+      border-radius: 3px;
+    }
+
+    /* SYSTEM TAB: Cores Capsule Grid */
+    .cores-card-title {
+      font-size: 0.76rem;
+      color: #9ca3af;
+      font-weight: 500;
+      margin-bottom: 0.45rem;
+    }
+    .cores-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.35rem;
+    }
+    .core-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .core-val-label {
+      font-size: 0.68rem;
+      color: #9ca3af;
+    }
+    .core-pill-track {
+      width: 100%;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+    }
+    .core-pill-fill {
+      width: 100%;
+      background: var(--apple-blue);
+      border-radius: 14px;
+      transition: height 0.4s ease;
+    }
+
+    /* SYSTEM TAB: 4 Stat Boxes (CPU temp, GPU temp, Fan 1, Fan 2) */
+    .stat-quad-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .stat-quad-box {
+      background: var(--app-card-bg);
+      border-radius: 10px;
+      border: 1px solid var(--app-card-border);
+      padding: 0.6rem 0.3rem;
+      text-align: center;
+    }
+    .stat-quad-icon {
+      font-size: 0.95rem;
+      color: #9ca3af;
+      margin-bottom: 0.15rem;
+    }
+    .stat-quad-title {
+      font-size: 0.65rem;
+      color: #9ca3af;
+      line-height: 1.1;
+    }
+    .stat-quad-val {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-top: 0.2rem;
+    }
+
+    /* SYSTEM TAB: Fan Control */
+    .fan-ctrl-title {
+      font-size: 0.78rem;
+      color: #9ca3af;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .fan-row-item {
+      margin-bottom: 0.65rem;
+    }
+    .fan-name-ctrl-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+    }
+    .fan-label {
+      font-size: 0.84rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .mini-seg-btn {
+      display: flex;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 1px;
+    }
+    .mini-seg-option {
+      border: none;
+      background: transparent;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.18rem 0.5rem;
+      color: #cbd5e1;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .mini-seg-option.active {
+      background: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+    }
+    .native-slider {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      background: var(--apple-blue);
+      border-radius: 2px;
+      outline: none;
+    }
+    .native-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+    }
+    .fan-subtext-stats {
+      font-size: 0.68rem;
+      color: #9ca3af;
+      margin-top: 0.35rem;
+    }
+    .link-fans-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.3rem 0.7rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 0.76rem;
+      font-weight: 500;
+      cursor: pointer;
+      margin: 0.4rem 0;
+      transition: var(--transition);
+    }
+    .link-fans-btn.linked {
+      background: rgba(0, 122, 255, 0.25);
+      border-color: var(--apple-blue);
+      color: #93c5fd;
+    }
+    .fan-notice-text {
+      font-size: 0.69rem;
+      color: #808695;
+      line-height: 1.35;
+      margin-bottom: 0.5rem;
+    }
+    .reset-fans-btn {
+      width: 100%;
+      padding: 0.45rem;
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      border-radius: 7px;
+      color: #ffffff;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .reset-fans-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* SYSTEM TAB: Battery Card */
+    .battery-status-line {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.4rem;
+    }
+    .battery-icon-svg {
+      width: 22px;
+      height: 12px;
+      border: 1.5px solid #ff3b30;
+      border-radius: 3px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding: 1px;
+    }
+    .battery-icon-svg::after {
+      content: "";
+      position: absolute;
+      right: -3px;
+      top: 2px;
+      bottom: 2px;
+      width: 2px;
+      background: #ff3b30;
+      border-radius: 0 1px 1px 0;
+    }
+    .battery-fill-level {
+      width: 20%;
+      height: 100%;
+      background: #ff3b30;
+      border-radius: 1px;
+    }
+    .battery-percent-text {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .battery-charging-pill {
+      font-size: 0.78rem;
+      color: var(--apple-green);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+    .battery-details-sub {
+      font-size: 0.74rem;
+      color: #9ca3af;
+      margin-bottom: 0.65rem;
+    }
+    .charge-limit-btn {
+      width: 100%;
+      padding: 0.5rem;
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      border-radius: 8px;
+      color: #ffffff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      margin-bottom: 0.45rem;
+      transition: var(--transition);
+    }
+    .charge-limit-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    /* DISPLAY & KEYBOARD TAB: Switch toggles */
+    .native-switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.45rem;
+    }
+    .switch-title-label {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .native-toggle {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 24px;
+    }
+    .native-toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider-native {
+      position: absolute;
+      inset: 0;
+      background-color: #38383a;
+      border-radius: 24px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .toggle-slider-native:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 2px;
+      bottom: 2px;
+      background-color: #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      transition: var(--transition);
+    }
+    input:checked + .toggle-slider-native {
+      background-color: var(--apple-green);
+    }
+    input:checked + .toggle-slider-native:before {
+      transform: translateX(18px);
+    }
+
+    /* Footer: Updated & Quit */
+    .native-window-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem 0.95rem;
+      font-size: 0.76rem;
+      color: #8b92a4;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .quit-link {
+      color: var(--apple-blue);
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .quit-link:hover {
+      text-decoration: underline;
+    }
+
+    /* -------------------------------------------------------------
+       AGENT ENGINEERING & 20 OBSTACLES SECTION
+       ------------------------------------------------------------- */
+    .section-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 5rem 1.5rem;
+    }
+    .section-head {
+      text-align: center;
+      margin-bottom: 3.5rem;
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 3.8vw, 2.8rem);
+      font-weight: 800;
+      margin-bottom: 0.8rem;
+      letter-spacing: -0.02em;
+    }
+    .section-sub {
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* 20 Obstacles Accordion Cards */
+    .obstacle-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.8rem;
+    }
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .pill-btn {
+      padding: 0.45rem 0.95rem;
+      border-radius: var(--pill-radius);
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .pill-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--border-highlight);
+    }
+    .pill-btn.active {
+      background: var(--apple-blue);
+      border-color: var(--apple-blue);
+      color: white;
+    }
+    .search-input-wrap {
+      position: relative;
+      min-width: 260px;
+    }
+    .search-input {
+      width: 100%;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--pill-radius);
+      padding: 0.5rem 1rem 0.5rem 2.2rem;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      outline: none;
+      transition: var(--transition);
+    }
+    .search-input:focus {
+      border-color: var(--apple-blue);
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+    }
+    .search-icon {
+      position: absolute;
+      left: 0.8rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .obstacles-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .obstacle-card {
+      background: var(--bg-surface-1);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      overflow: hidden;
+      transition: var(--transition);
+    }
+    .obstacle-card:hover {
+      border-color: var(--border-highlight);
+    }
+    .obstacle-header {
+      padding: 1.1rem 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .obstacle-title-group {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex: 1;
+    }
+    .obstacle-badge-num {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.08);
+      color: #38bdf8;
+      padding: 0.25rem 0.55rem;
+      border-radius: 6px;
+    }
+    .obstacle-title {
+      font-size: 0.96rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .obstacle-chevron {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      transition: transform 0.3s ease;
+    }
+    .obstacle-card.open .obstacle-chevron {
+      transform: rotate(180deg);
+      color: var(--apple-blue);
+    }
+    .obstacle-body {
+      display: none;
+      padding: 0 1.4rem 1.3rem;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding-top: 1rem;
+    }
+    .obstacle-card.open .obstacle-body {
+      display: block;
+      animation: fadeIn 0.25s ease;
+    }
+    .obstacle-root-cause {
+      margin-bottom: 0.7rem;
+    }
+    .obstacle-fix {
+      background: rgba(0, 0, 0, 0.3);
+      border-left: 3px solid var(--apple-green);
+      border-radius: 0 8px 8px 0;
+      padding: 0.75rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: #e2e8f0;
+      overflow-x: auto;
+      margin-top: 0.5rem;
+    }
+
+    /* -------------------------------------------------------------
+       TERMINAL PLAYGROUND
+       ------------------------------------------------------------- */
+    .terminal-container {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5);
+      font-family: var(--font-mono);
+      margin-top: 2rem;
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 1rem;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+    }
+    .term-dots { display: flex; gap: 0.45rem; }
+    .term-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red { background: #ff5f56; }
+    .dot-yellow { background: #ffbd2e; }
+    .dot-green { background: #27c93f; }
+    .term-title { font-size: 0.76rem; color: #8b949e; }
+    .term-tabs {
+      display: flex;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      overflow-x: auto;
+    }
+    .term-tab {
+      padding: 0.5rem 1rem;
+      font-size: 0.76rem;
+      color: #8b949e;
+      background: transparent;
+      border: none;
+      border-right: 1px solid #30363d;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .term-tab.active { color: #58a6ff; background: #0d1117; }
+    .term-body {
+      padding: 1.3rem;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      color: #c9d1d9;
+      min-height: 220px;
+      overflow-x: auto;
+    }
+    .term-prompt { color: #7ee787; }
+    .term-dim { color: #8b949e; }
+    .term-success { color: #3fb950; font-weight: 600; }
+    .term-warn { color: #d29922; }
+    .term-cyan { color: #79c0ff; }
+    .term-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0.6rem 1rem;
+      background: #161b22;
+      border-top: 1px solid #30363d;
+    }
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 6px;
+      color: #c9d1d9;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: var(--transition);
+    }
+    .copy-btn:hover { background: rgba(255, 255, 255, 0.2); color: white; }
+
+    /* Download Banner */
+    .download-card {
+      background: radial-gradient(circle at top right, rgba(0, 122, 255, 0.25), transparent 70%),
+                  var(--bg-surface-1);
+      border: 1px solid var(--border-highlight);
+      border-radius: 24px;
+      padding: 3.5rem 2rem;
+      text-align: center;
+      margin: 4rem auto;
+      max-width: 960px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 3rem 1.5rem;
+      text-align: center;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      background: rgba(10, 11, 16, 0.8);
+    }
+    footer a { color: var(--text-secondary); text-decoration: none; margin: 0 0.5rem; }
+    footer a:hover { color: var(--apple-blue); }
+
+    @media (max-width: 640px) {
+      .hero { padding: 3.5rem 1rem 2rem; }
+      .nav-links { display: none; }
+      .stat-quad-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Light Orbs -->
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <!-- Navigation -->
+  <header class="site-nav">
+    <nav class="nav-inner">
+      <a href="#" class="nav-brand">
+        <div class="brand-icon" style="background: transparent; box-shadow: none;">
+          <img src="logo.png" alt="SentryBar Logo" style="width: 100%; height: 100%; border-radius: 8px; object-fit: cover;">
+        </div>
+        <span>SentryBar</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#simulator">App Simulator</a></li>
+        <li><a href="#agent-story">Agent Engineering</a></li>
+        <li><a href="#obstacles">20 Obstacles</a></li>
+        <li><a href="#terminal">CLI Diagnostics</a></li>
+        <li><a href="#download">Download</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button id="themeBtn" class="theme-toggle" title="Toggle theme">
+          <span id="themeIcon">☀️</span>
+          <span id="themeText">Light</span>
+        </button>
+        <a href="https://github.com/haniff97/SentryBar/releases/latest/download/SentryBar.dmg" class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.84rem;">
+          Download SentryBar.dmg
+        </a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Hero Section -->
+  <main>
+    <section class="hero">
+      <div class="hero-eyebrow">
+        <span class="badge badge-blue">Apple Silicon (M1 Pro / M2 / M3 / M4)</span>
+        <span class="badge badge-agent">Autonomous AI Agent Project</span>
+      </div>
+      <h1>
+        Native Mac Hardware Telemetry.<br>
+        <span class="text-gradient">Pure Swift. Root Control. Built with AI.</span>
+      </h1>
+      <p class="hero-lead">
+        A bespoke macOS menu-bar utility with direct Apple SMC reads, privileged dual-fan override, multi-monitor hybrid brightness, and a physical keyboard cleaner lock.
+      </p>
+      <div class="hero-cta">
+        <a href="#simulator" class="btn btn-primary">
+          <span>Explore Live Interactive App</span>
+          <span>↓</span>
+        </a>
+        <a href="#obstacles" class="btn btn-secondary">
+          <span>Read 20 Solved Kernel Obstacles</span>
+        </a>
+        <a href="https://buymeacoffee.com/haniff97" target="_blank" class="btn btn-coffee">
+          ☕ Support on Buy Me a Coffee
+        </a>
+      </div>
+      <div class="meta-specs">
+        <span>⚡ <strong>0% Idle Overhead</strong> (2s Polling)</span>
+        <span>🛡️ <strong>Zero Telemetry</strong> / 100% Local</span>
+        <span>📦 <strong>~5 MB</strong> Native SPM Package</span>
+        <span>🔒 <strong>CGEventTap</strong> Cleaner Mode</span>
+      </div>
+    </section>
+
+    <!-- Interactive macOS Menu Bar Simulator (Faithful to Screenshots) -->
+    <section id="simulator" class="simulator-section">
+      <div class="simulator-window-frame">
+        
+        <!-- macOS Top Menu Bar (Matches Image 1) -->
+        <div class="mac-desktop-menubar">
+          <div class="menubar-left">
+            <span style="font-size: 1rem; color: #fff;"></span>
+            <span style="font-weight: 700; color: #fff;">SentryBar</span>
+            <span>File</span>
+            <span>Edit</span>
+            <span>Sensors</span>
+            <span>Window</span>
+            <span>Help</span>
+          </div>
+
+          <div class="menubar-right">
+            <!-- Native Menu Bar Item from Image 1 -->
+            <div id="nativeStatusItem" class="native-menubar-item active" title="Click to toggle SentryBar popover">
+              <svg class="chip-svg-icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+              <div class="menubar-item-text">
+                <span id="barTempLine" class="menubar-item-row1">71°C / 69°C</span>
+                <span id="barRpmLine" class="menubar-item-row2">6222 RPM</span>
+              </div>
+            </div>
+
+            <span style="color: #cbd5e1; font-size: 0.8rem;">􀙇</span>
+            <span style="color: #cbd5e1; font-size: 0.8rem;">100% 􀛨</span>
+            <span id="macClock" style="color: #cbd5e1; font-size: 0.82rem;">2:21 PM</span>
+          </div>
+        </div>
+
+        <!-- Desktop Backdrop Area with the Popover Window -->
+        <div class="desktop-backdrop">
+          
+          <!-- Native App Window (Matches Images 2, 3, 4) -->
+          <div id="nativeAppWindow" class="native-app-window">
+            <div class="popover-pointer"></div>
+
+            <!-- Header -->
+            <div class="native-window-header">
+              <div class="header-left">
+                <svg class="header-chip-icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+                <span class="native-title">System Monitor</span>
+              </div>
+              <button class="gear-btn" title="Settings">⚙️</button>
+            </div>
+
+            <!-- Segmented Tab Bar [ System | Display | Keyboard ] -->
+            <div class="segmented-tabs-container">
+              <button class="seg-tab-btn active" data-tab="pane-system">System</button>
+              <button class="seg-tab-btn" data-tab="pane-display">Display</button>
+              <button class="seg-tab-btn" data-tab="pane-keyboard">Keyboard</button>
+            </div>
+
+            <!-- TAB 1: SYSTEM (Matches Image 4) -->
+            <div id="pane-system" class="native-tab-pane active">
+              
+              <!-- CPU & Memory Row -->
+              <div class="cpu-mem-row">
+                <!-- CPU Card -->
+                <div class="native-card" style="margin-bottom: 0;">
+                  <div class="metric-sub-title">CPU</div>
+                  <div id="cpuPercentVal" class="metric-big-val">50.4%</div>
+                  <canvas id="cpuWaveCanvas" class="cpu-sparkline-canvas"></canvas>
+                </div>
+                <!-- Memory Card -->
+                <div class="native-card" style="margin-bottom: 0;">
+                  <div class="metric-sub-title">Memory</div>
+                  <div class="metric-big-val">60.5%</div>
+                  <div class="memory-bar-track">
+                    <div class="memory-bar-fill"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cores Card -->
+              <div class="native-card">
+                <div class="cores-card-title">Cores</div>
+                <div class="cores-row">
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal0">76</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar0" style="height: 76%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal1">75</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar1" style="height: 75%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal2">63</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar2" style="height: 63%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal3">46</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar3" style="height: 46%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal4">31</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar4" style="height: 31%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal5">55</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar5" style="height: 55%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal6">37</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar6" style="height: 37%;"></div></div>
+                  </div>
+                  <div class="core-column">
+                    <span class="core-val-label" id="cVal7">22</span>
+                    <div class="core-pill-track"><div class="core-pill-fill" id="cBar7" style="height: 22%;"></div></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4 Stat Boxes (CPU temp, GPU temp, Fan 1, Fan 2) -->
+              <div class="stat-quad-grid">
+                <div class="stat-quad-box">
+                  <div class="stat-quad-icon">🌡️</div>
+                  <div class="stat-quad-title">CPU temp</div>
+                  <div class="stat-quad-val" id="cpuTempBox">75°C</div>
+                </div>
+                <div class="stat-quad-box">
+                  <div class="stat-quad-icon">🔲</div>
+                  <div class="stat-quad-title">GPU temp</div>
+                  <div class="stat-quad-val">73°C</div>
+                </div>
+                <div class="stat-quad-box">
+                  <div class="stat-quad-icon">🌀</div>
+                  <div class="stat-quad-title">Fan 1</div>
+                  <div class="stat-quad-val" id="fan1Box">5789 rpm</div>
+                </div>
+                <div class="stat-quad-box">
+                  <div class="stat-quad-icon">🌀</div>
+                  <div class="stat-quad-title">Fan 2</div>
+                  <div class="stat-quad-val" id="fan2Box">6275 rpm</div>
+                </div>
+              </div>
+
+              <!-- Fan Control Card -->
+              <div class="native-card">
+                <div class="fan-ctrl-title">Fan Control</div>
+                
+                <!-- Fan 1 -->
+                <div class="fan-row-item">
+                  <div class="fan-name-ctrl-line">
+                    <span class="fan-label">🌀 Fan 1</span>
+                    <div class="mini-seg-btn">
+                      <button class="mini-seg-option active" id="fan1AutoBtn">Auto</button>
+                      <button class="mini-seg-option" id="fan1ManualBtn">Manual</button>
+                    </div>
+                  </div>
+                  <input type="range" id="fan1Slider" class="native-slider" min="1200" max="5779" value="5789">
+                  <div class="fan-subtext-stats">Target <span id="f1Tgt">5,789</span> rpm · Current <span id="f1Cur">5,789</span> rpm · Max 5,779</div>
+                </div>
+
+                <!-- Fan 2 -->
+                <div class="fan-row-item">
+                  <div class="fan-name-ctrl-line">
+                    <span class="fan-label">🌀 Fan 2</span>
+                    <div class="mini-seg-btn">
+                      <button class="mini-seg-option active" id="fan2AutoBtn">Auto</button>
+                      <button class="mini-seg-option" id="fan2ManualBtn">Manual</button>
+                    </div>
+                  </div>
+                  <input type="range" id="fan2Slider" class="native-slider" min="1200" max="6241" value="6275">
+                  <div class="fan-subtext-stats">Target <span id="f2Tgt">6,244</span> rpm · Current <span id="f2Cur">6,275</span> rpm · Max 6,241</div>
+                </div>
+
+                <button id="linkFansBtn" class="link-fans-btn">
+                  <span>🔗</span> <span>Link fans</span>
+                </button>
+                <div class="fan-notice-text">
+                  Link fans to control both from either slider.<br>
+                  Manual control overrides Apple's thermal management...
+                </div>
+                <button id="resetFansBtn" class="reset-fans-btn">Reset all to automatic</button>
+              </div>
+
+              <!-- Battery Card -->
+              <div class="native-card">
+                <div class="battery-status-line">
+                  <div class="battery-icon-svg"><div class="battery-fill-level"></div></div>
+                  <span class="battery-percent-text">18%</span>
+                  <span class="battery-charging-pill">⚡ Charging</span>
+                </div>
+                <div class="battery-details-sub">Health 81% &nbsp; 260 cycles</div>
+                <button class="charge-limit-btn" onclick="alert('Opens native macOS Tahoe / Sequoia Battery Settings: com.apple.Battery-Settings.extension')">
+                  <span>🪫</span> <span>Set Charge Limit (80–100%)</span>
+                </button>
+                <div class="fan-notice-text" style="margin-bottom: 0;">
+                  Protect battery life while plugged in. In Battery settings, click ⓘ next to Charging to choose the limit.
+                </div>
+              </div>
+
+              <!-- Window Footer -->
+              <div class="native-window-footer">
+                <span id="updateTimeSystem">Updated 2:21:49 PM</span>
+                <span class="quit-link" onclick="togglePopover()">Quit</span>
+              </div>
+            </div>
+
+            <!-- TAB 2: DISPLAY (Matches Image 3) -->
+            <div id="pane-display" class="native-tab-pane">
+              <!-- Displays Card -->
+              <div class="native-card">
+                <div class="fan-ctrl-title">Displays</div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                  <span style="font-size: 0.82rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem;">
+                    <span>☼</span> Built-in Retina Di...
+                  </span>
+                  <span style="font-size: 0.72rem; color: #9ca3af; margin-right: 0.6rem;">software</span>
+                  <input type="range" class="native-slider" style="width: 130px;" min="10" max="100" value="85">
+                </div>
+                <div class="fan-notice-text" style="margin-bottom: 0;">
+                  Apple displays adjust hardware; others use a software overlay.
+                </div>
+              </div>
+
+              <!-- Lid Closed Mode Card -->
+              <div class="native-card">
+                <div class="native-switch-row">
+                  <span class="switch-title-label">
+                    <span>⊘</span> Lid Closed Mode
+                  </span>
+                  <label class="native-toggle">
+                    <input type="checkbox" id="lidToggleSwitch">
+                    <span class="toggle-slider-native"></span>
+                  </label>
+                </div>
+                <div id="lidStatusSubtext" class="fan-notice-text" style="margin-bottom: 0;">
+                  Closing the lid sleeps the Mac.
+                </div>
+              </div>
+
+              <!-- Window Footer -->
+              <div class="native-window-footer">
+                <span id="updateTimeDisplay">Updated 2:21:57 PM</span>
+                <span class="quit-link" onclick="togglePopover()">Quit</span>
+              </div>
+            </div>
+
+            <!-- TAB 3: KEYBOARD (Matches Image 2) -->
+            <div id="pane-keyboard" class="native-tab-pane">
+              <div class="native-card">
+                <div class="native-switch-row">
+                  <span class="switch-title-label">
+                    <span>⌨️</span> Keyboard Lock
+                  </span>
+                  <label class="native-toggle">
+                    <input type="checkbox" id="keyboardLockToggle">
+                    <span class="toggle-slider-native"></span>
+                  </label>
+                </div>
+                <div id="kbSubtext" class="fan-notice-text" style="margin-bottom: 0.4rem;">
+                  Off: keyboard works normally. On: all keys are blocked (mouse stays usable).
+                </div>
+
+                <!-- Interactive Testing Feedback -->
+                <div id="kbLockFeedback" style="display: none; background: rgba(255, 59, 48, 0.15); border: 1px dashed var(--apple-red); border-radius: 8px; padding: 0.7rem; margin-top: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.8rem; font-weight: 700; color: #ff8580;">🔒 CLEANER MODE ENGAGED</div>
+                  <div style="font-size: 0.72rem; color: #cbd5e1; margin-top: 0.2rem;">
+                    Press keys on your keyboard now! CGEventTap blocks input.
+                  </div>
+                  <div style="font-size: 0.95rem; font-weight: 700; color: #ffffff; margin-top: 0.4rem;">
+                    Blocked Keystrokes: <span id="blockedKeyCount">0</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Window Footer -->
+              <div class="native-window-footer">
+                <span id="updateTimeKeyboard">Updated 2:22:19 PM</span>
+                <span class="quit-link" onclick="togglePopover()">Quit</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Autonomous Agent Engineering Story -->
+    <section id="agent-story" class="section-wrap" style="background: rgba(255, 255, 255, 0.015); border-radius: 32px; border: 1px solid var(--border-subtle);">
+      <div class="section-head">
+        <span class="badge badge-agent">Autonomous AI Engineering</span>
+        <h2 class="section-title">Deep Hardware Systems, Built by an Agent</h2>
+        <p class="section-sub">
+          Writing native Apple Silicon hardware controls in Swift requires navigating undocumented SMC registers, root separation, Mach kernel APIs, and strict macOS TCC privacy sandboxes. Here is how the autonomous agent debugged and built SentryBar.
+        </p>
+      </div>
+
+      <!-- Architecture Topology Diagram -->
+      <div style="background: var(--bg-surface-1); border: 1px solid var(--border-subtle); border-radius: 18px; padding: 2.2rem 1.6rem; margin-bottom: 3.5rem;">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <h3 style="font-size: 1.25rem;">SentryBar Architecture & Privilege Separation</h3>
+          <p style="font-size: 0.84rem; color: var(--text-secondary);">User-space GUI cleanly separated from root-level hardware access.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.2rem; align-items: center;">
+          <!-- Node 1 -->
+          <div style="background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.2rem;">
+            <div style="font-size: 0.68rem; font-weight: 700; color: var(--apple-blue); text-transform: uppercase;">User Space</div>
+            <h4 style="margin: 0.3rem 0; font-size: 1rem;">SentryBar.app</h4>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">SwiftUI MenuBarExtra, Mach kernel CPU/RAM reader, CGEventTap keyboard cleaner lock.</p>
+          </div>
+
+          <!-- Connector 1 -->
+          <div style="text-align: center; font-family: var(--font-mono); font-size: 0.74rem; color: #38bdf8;">
+            <div>⟷ UNIX Domain Socket ⟷</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">/tmp/...fanhelper.sock</div>
+          </div>
+
+          <!-- Node 2 -->
+          <div style="background: var(--bg-surface-2); border: 1px solid rgba(175, 82, 222, 0.4); border-radius: 12px; padding: 1.2rem;">
+            <div style="font-size: 0.68rem; font-weight: 700; color: var(--apple-purple); text-transform: uppercase;">Root Privileged Daemon</div>
+            <h4 style="margin: 0.3rem 0; font-size: 1rem;">FanHelper Daemon</h4>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">Spawned via one-time osascript admin prompt. Executes line-delimited write commands.</p>
+          </div>
+
+          <!-- Connector 2 -->
+          <div style="text-align: center; font-family: var(--font-mono); font-size: 0.74rem; color: var(--apple-green);">
+            <div>⟷ IOConnectCall ⟷</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">80-byte SMC struct</div>
+          </div>
+
+          <!-- Node 3 -->
+          <div style="background: var(--bg-surface-2); border: 1px solid rgba(52, 199, 89, 0.4); border-radius: 12px; padding: 1.2rem;">
+            <div style="font-size: 0.68rem; font-weight: 700; color: var(--apple-green); text-transform: uppercase;">Kernel Space</div>
+            <h4 style="margin: 0.3rem 0; font-size: 1rem;">Apple Silicon SMC</h4>
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">Hardware keys: FNum, F0Ac, F0Tg, Tp09, Tg05. Reads fan speeds & thermal sensors.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 20 Obstacles Explorer Section -->
+    <section id="obstacles" class="section-wrap">
+      <div class="section-head">
+        <span class="badge badge-blue">Engineering Log</span>
+        <h2 class="section-title">20 Real-World Engineering Hurdles Solved</h2>
+        <p class="section-sub">
+          Explore the exact issues encountered and solved during development, directly documented in <code>AGENTS.md</code>.
+        </p>
+      </div>
+
+      <!-- Controls -->
+      <div class="obstacle-controls">
+        <div class="filter-pills" id="filterContainer">
+          <button class="pill-btn active" data-filter="all">All (20)</button>
+          <button class="pill-btn" data-filter="smc">SMC & Fans</button>
+          <button class="pill-btn" data-filter="tcc">TCC & Permissions</button>
+          <button class="pill-btn" data-filter="display">Display & Overlay</button>
+          <button class="pill-btn" data-filter="ipc">IPC & Build</button>
+        </div>
+        <div class="search-input-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="obstacleSearch" class="search-input" placeholder="Search obstacle (e.g. alignment, socket, DDC)...">
+        </div>
+      </div>
+
+      <!-- Accordion List -->
+      <div class="obstacles-list" id="obstaclesList">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- Developer Diagnostics Terminal -->
+    <section id="terminal" class="section-wrap">
+      <div class="section-head">
+        <span class="badge badge-agent">Developer CLI</span>
+        <h2 class="section-title">Built-In Diagnostics Playground</h2>
+        <p class="section-sub">Replay and inspect the self-test diagnostics built into the SentryBar CLI binary.</p>
+      </div>
+
+      <div class="terminal-container">
+        <div class="terminal-bar">
+          <div class="term-dots">
+            <div class="term-dot dot-red"></div>
+            <div class="term-dot dot-yellow"></div>
+            <div class="term-dot dot-green"></div>
+          </div>
+          <div class="term-title">bash — Apple M1 Pro — 80x24</div>
+          <div style="width: 40px;"></div>
+        </div>
+
+        <div class="term-tabs">
+          <button class="term-tab active" data-cmd="test">swift run SentryBar --test</button>
+          <button class="term-tab" data-cmd="fan-test">swift run SentryBar --fan-test</button>
+          <button class="term-tab" data-cmd="ax-check">--ax-check (TCC Audit)</button>
+          <button class="term-tab" data-cmd="make-app">./scripts/make-app.sh</button>
+        </div>
+
+        <div class="term-body" id="termOutput"></div>
+
+        <div class="term-actions">
+          <button id="copyTermCmd" class="copy-btn">
+            <span>📋 Copy CLI Command</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download & Installation -->
+    <section id="download" class="download-card">
+      <span class="badge badge-blue">Ready to Run</span>
+      <h2 style="font-family: var(--font-display); font-size: 2.2rem; margin: 0.6rem 0 0.8rem;">
+        Get SentryBar on Your Mac
+      </h2>
+      <p style="color: var(--text-secondary); max-width: 600px; margin: 0 auto 2rem;">
+        Compile in seconds using native Swift Package Manager or package the self-contained app bundle with persistent TCC designated requirements.
+      </p>
+
+      <div style="background: rgba(0, 0, 0, 0.4); border-radius: 12px; padding: 1.2rem; max-width: 620px; margin: 0 auto 2rem; font-family: var(--font-mono); font-size: 0.84rem; text-align: left; border: 1px solid var(--border-subtle); color: #cbd5e1; line-height: 1.5;">
+        <div><span style="color: var(--apple-green);">$</span> git clone https://github.com/haniff97/SentryBar</div>
+        <div style="margin-bottom: 0.8rem;"><span style="color: var(--apple-green);">$</span> cd SentryBar</div>
+
+        <div style="color: var(--text-muted);"># Run directly (development)</div>
+        <div style="margin-bottom: 0.8rem;"><span style="color: var(--apple-green);">$</span> swift run SystemMonitor</div>
+
+        <div style="color: var(--text-muted);"># Print all sensor readings (CLI)</div>
+        <div style="margin-bottom: 0.8rem;"><span style="color: var(--apple-green);">$</span> swift run SystemMonitor --test</div>
+
+        <div style="color: var(--text-muted);"># Build the packaged .app</div>
+        <div><span style="color: var(--apple-green);">$</span> ./scripts/make-app.sh        <span style="color: var(--text-muted);"># -&gt; dist/SentryBar.app</span></div>
+        <div style="margin-bottom: 0.8rem;"><span style="color: var(--apple-green);">$</span> open dist/SentryBar.app</div>
+
+        <div style="color: var(--text-muted);"># Build the DMG installer</div>
+        <div><span style="color: var(--apple-green);">$</span> ./scripts/make-dmg.sh        <span style="color: var(--text-muted);"># -&gt; dist/SentryBar.dmg (+ prints SHA-256)</span></div>
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+        <a href="https://github.com/haniff97/SentryBar/releases/latest/download/SentryBar.dmg" class="btn btn-primary">
+          Download SentryBar.dmg
+        </a>
+        <a href="https://github.com/haniff97/SentryBar" target="_blank" class="btn btn-secondary">
+          View on GitHub
+        </a>
+        <a href="https://buymeacoffee.com/haniff97" target="_blank" class="btn btn-coffee">
+          ☕ Support on Buy Me a Coffee
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      <strong>SentryBar</strong> — Engineered for Apple Silicon Macs. Open source under MIT License.
+    </p>
+    <div style="margin-top: 0.8rem;">
+      <a href="https://github.com/haniff97/SentryBar" target="_blank">GitHub Repository</a> •
+      <a href="https://buymeacoffee.com/haniff97" target="_blank">Buy Me a Coffee</a> •
+      <a href="#simulator">App Simulator</a> •
+      <a href="#obstacles">Agent Engineering Notes</a>
+    </div>
+    <p style="margin-top: 1rem; font-size: 0.78rem; color: var(--text-muted);">
+      Crafted with precision • Powered by autonomous agentic engineering
+    </p>
+  </footer>
+
+  <!-- -------------------------------------------------------------
+       JAVASCRIPT LOGIC
+       ------------------------------------------------------------- -->
+  <script>
+    // 1. ALL 20 OBSTACLES FROM AGENTS.md
+    const OBSTACLES = [
+      {
+        id: 1,
+        category: "smc",
+        title: "SMC reads returned kIOReturnBadArgument",
+        rootCause: "SMC wire struct was initially 76 bytes due to Swift's default memory layout, but the macOS kernel expects an exact 80-byte SMCKeyData struct (vers.release UInt16 + explicit padding).",
+        fix: "Aligned SMCKeyData to exactly 80 bytes, converted keys to big-endian FourCC ('FNum' -> 0x464E756D), and passed output buffer size in bytes to IOConnectCallStructMethod."
+      },
+      {
+        id: 2,
+        category: "smc",
+        title: "Fan writes blocked with kIOReturnNotPrivileged",
+        rootCause: "User-space SMC fan-speed writes are rejected with kIOReturnNotPrivileged by the Apple Silicon kernel unless running with root privileges.",
+        fix: "Engineered FanHelper: a standalone root-privileged daemon spawned once via osascript with administrator privileges, communicating over /tmp/com.sentrybar.fanhelper.sock."
+      },
+      {
+        id: 3,
+        category: "display",
+        title: "External HP P224 brightness slider did nothing",
+        rootCause: "CoreDisplay only drives Apple displays. DDC/CI over I2C fails on many external HDMI/DP monitors on Apple Silicon.",
+        fix: "Implemented SoftwareBrightness using a borderless black .statusBar overlay window with window.animationBehavior = .none and orderOut instead of close to prevent crashes."
+      },
+      {
+        id: 4,
+        category: "tcc",
+        title: "Keyboard lock CGEventTap was 'impotent' (events leaked)",
+        rootCause: "A blocking (swallowing) CGEventTap requires BOTH Accessibility AND Input Monitoring (CGPreflightListenEventAccess). Without Input Monitoring, events pass through untouched.",
+        fix: "Configured dual TCC detection and added automatic tap resurrection on tapDisabledByTimeout / tapDisabledByUserInput."
+      },
+      {
+        id: 5,
+        category: "ipc",
+        title: "TCC grants lost after every local rebuild",
+        rootCause: "Ad-hoc codesign (-s -) produces a unique cdhash on every rebuild, so macOS treats every build as an untrusted new application and wipes TCC grants.",
+        fix: "Signed with an identifier-only designated requirement (no cdhash): codesign --force --sign - --identifier local.sysmon.SentryBar -r 'designated => identifier \"local.sysmon.SentryBar\"'."
+      },
+      {
+        id: 6,
+        category: "ipc",
+        title: "Intermittent Swift build deadlock at 0% CPU",
+        rootCause: "swift-frontend hung during whole-module release compilation with error 'input file was modified during the build'.",
+        fix: "Added build script cleanup routine: pkill -9 -f swift-frontend + rm -rf .build before executing clean releases."
+      },
+      {
+        id: 7,
+        category: "smc",
+        title: "Apple Silicon M1 Pro SMC key mapping discrepancies",
+        rootCause: "macOS 26 dropped legacy Intel SMC keys like Ftst; fan modes use uppercase F0Md, and fan speeds are little-endian IEEE 754 floats.",
+        fix: "Mapped FNum for fan count, F{n}Ac for current RPM, F{n}Mx for caps, F0Md for manual mode, and max(Tp09..Tp0c) for P-core CPU temperatures."
+      },
+      {
+        id: 8,
+        category: "tcc",
+        title: "Keyboard lock toggle infinite loop after granting permission",
+        rootCause: "AXIsProcessTrusted() and CGPreflightListenEventAccess() return false for the currently running process until the app is relaunched, creating an infinite loop.",
+        fix: "Added needsRelaunch state flag and an orange 'Relaunch App' button calling Process with /usr/bin/open -n <path>."
+      },
+      {
+        id: 9,
+        category: "tcc",
+        title: "CGPreflightListenEventAccess() unreliable on ad-hoc builds",
+        rootCause: "API returned false even when Input Monitoring was enabled by user in System Settings.",
+        fix: "Built multi-stage InputMonitoringDetector testing a listenOnly tap first, falling back to HID-level, session-level, and Ventura deep-link settings."
+      },
+      {
+        id: 10,
+        category: "ipc",
+        title: "NSWorkspace.openApplication silently failed for Relaunch",
+        rootCause: "macOS refused to launch a second instance of the already-running bundle URL when called from NSWorkspace.",
+        fix: "Switched to /usr/bin/open -n <path> via Process, which guarantees spawning a fresh process instance before terminating self."
+      },
+      {
+        id: 11,
+        category: "ipc",
+        title: "Old 'SentryBar 2.app' in dist/ caused grant confusion",
+        rootCause: "Users inadvertently granted permissions to an old leftover binary in dist/ while running the current one without grants.",
+        fix: "Cleaned dist/ directory in make-app.sh and added verification that only single SentryBar.app exists."
+      },
+      {
+        id: 12,
+        category: "tcc",
+        title: "AXIsProcessTrusted() returned stale values for running processes",
+        rootCause: "UI showed green badges when user toggled in System Settings, but live process was still bound to launch-time credentials.",
+        fix: "refreshTrust() automatically invokes probeBlockingTap() to discover stale state and triggers the Relaunch prompt seamlessly."
+      },
+      {
+        id: 13,
+        category: "tcc",
+        title: "probeBlockingTap() — Ground-truth tap test creation",
+        rootCause: "Flag APIs (AX/IM) can give false positives or false negatives compared to actual CGEventTap creation.",
+        fix: "Implemented probeBlockingTap() which creates a real test defaultTap at HID-level (falling back to session) and immediately invalidates it."
+      },
+      {
+        id: 14,
+        category: "ipc",
+        title: "Codesign failed with 'resource fork / detritus not allowed'",
+        rootCause: "Finder and cp commands attached quarantine and extended attributes (com.apple.FinderInfo) after xattr -cr was called.",
+        fix: "Moved xattr -cr immediately before the final codesign step and added codesign --deep to sign nested FanHelper cleanly."
+      },
+      {
+        id: 15,
+        category: "tcc",
+        title: "Keyboard Accessibility reported OFF while System Settings showed ON",
+        rootCause: "TCC record/path identity mismatch occurred after moving binaries or running swift run vs packaged app.",
+        fix: "Maintained persistent needsRelaunch flag and removed false-positive HID fallback; instructed user to add exact dist/SentryBar.app."
+      },
+      {
+        id: 16,
+        category: "ipc",
+        title: "Fan helper socket protocol deadlocked on read",
+        rootCause: "Helper read loop waited for EOF before replying, but client app was waiting for a reply before closing the connection.",
+        fix: "Refactored protocol to single newline-delimited command/response: helper reads line, replies immediately, closes client, and awaits next connection."
+      },
+      {
+        id: 17,
+        category: "ipc",
+        title: "Fan helper failed to launch when project path contained spaces",
+        rootCause: "Path /Users/user/Han Project/... was split by the shell in AppleScript's 'do shell script' command.",
+        fix: "Properly quoted and escaped the binary path using safe single-quote wrapping before passing into osascript."
+      },
+      {
+        id: 18,
+        category: "smc",
+        title: "Linked dual-fan manual mode slider synchronization",
+        rootCause: "Dual fans often have different physical maximum RPM ratings (e.g. 5200 RPM vs 4900 RPM).",
+        fix: "Added 'Link fans' toggle where slider adjustments broadcast target RPMs to all fans clamped to each fan's individual maximum cap."
+      },
+      {
+        id: 19,
+        category: "smc",
+        title: "Native battery limiter vs third-party dangerous SMC overrides",
+        rootCause: "Direct SMC battery charging overrides are fragile and risk battery controller desynchronization on Apple Silicon.",
+        fix: "Integrated direct deep-link to macOS Tahoe/Sequoia com.apple.Battery-Settings.extension for Apple-supported 80-100% charging limit."
+      },
+      {
+        id: 20,
+        category: "display",
+        title: "Charge Limit discoverability & user guidance",
+        rootCause: "Users missed the native limit option when it was tucked behind small trailing icons.",
+        fix: "Prominently featured full-width 'Set Charge Limit (80-100%)' action with guidance on navigating the macOS native battery panel."
+      }
+    ];
+
+    // 2. RENDER OBSTACLES ACCORDION
+    const obstaclesList = document.getElementById('obstaclesList');
+    const searchInput = document.getElementById('obstacleSearch');
+    const filterBtns = document.querySelectorAll('.pill-btn');
+    let currentFilter = 'all';
+
+    function renderObstacles() {
+      const q = searchInput.value.toLowerCase().trim();
+      const filtered = OBSTACLES.filter(item => {
+        const matchesFilter = currentFilter === 'all' || item.category === currentFilter;
+        const matchesQuery = item.title.toLowerCase().includes(q) ||
+                             item.rootCause.toLowerCase().includes(q) ||
+                             item.fix.toLowerCase().includes(q);
+        return matchesFilter && matchesQuery;
+      });
+
+      if (filtered.length === 0) {
+        obstaclesList.innerHTML = `<div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">No obstacles found matching "${q}".</div>`;
+        return;
+      }
+
+      obstaclesList.innerHTML = filtered.map(item => `
+        <div class="obstacle-card" id="obs-${item.id}">
+          <div class="obstacle-header" onclick="toggleObstacle(${item.id})">
+            <div class="obstacle-title-group">
+              <span class="obstacle-badge-num">#${item.id}</span>
+              <span class="obstacle-title">${item.title}</span>
+            </div>
+            <span class="obstacle-chevron">▼</span>
+          </div>
+          <div class="obstacle-body">
+            <div class="obstacle-root-cause">
+              <strong style="color: #ff8580;">Root Cause:</strong> ${item.rootCause}
+            </div>
+            <div class="obstacle-fix">
+              <strong style="color: var(--apple-green);">Agent Solution:</strong> ${item.fix}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.toggleObstacle = function(id) {
+      const card = document.getElementById(`obs-${id}`);
+      if (card) card.classList.toggle('open');
+    };
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderObstacles();
+      });
+    });
+    searchInput.addEventListener('input', renderObstacles);
+    renderObstacles();
+
+    // 3. SEGMENTED TAB SWITCHING (Exact match to Screenshots)
+    const segButtons = document.querySelectorAll('.seg-tab-btn');
+    const tabPanes = document.querySelectorAll('.native-tab-pane');
+    segButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        segButtons.forEach(b => b.classList.remove('active'));
+        tabPanes.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const target = document.getElementById(btn.dataset.tab);
+        if (target) target.classList.add('active');
+      });
+    });
+
+    // 4. MENU BAR ITEM POPUP TOGGLE
+    const nativeStatusItem = document.getElementById('nativeStatusItem');
+    const nativeAppWindow = document.getElementById('nativeAppWindow');
+    function togglePopover() {
+      nativeStatusItem.classList.toggle('active');
+      nativeAppWindow.style.display = nativeAppWindow.style.display === 'none' ? 'block' : 'none';
+    }
+    nativeStatusItem.addEventListener('click', togglePopover);
+
+    // 5. LIVE CPU WAVEFORM CANVAS
+    const canvas = document.getElementById('cpuWaveCanvas');
+    const ctx = canvas.getContext('2d');
+    let wavePoints = [45, 42, 48, 50, 49, 52, 65, 50, 48];
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth - 32;
+      canvas.height = 38;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function drawWave() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width;
+      const h = canvas.height;
+      
+      // Draw smooth curve matching Image 4
+      ctx.beginPath();
+      ctx.moveTo(0, h - (wavePoints[0] / 100) * h);
+      for (let i = 1; i < wavePoints.length; i++) {
+        const x = (i / (wavePoints.length - 1)) * w;
+        const y = h - (wavePoints[i] / 100) * h;
+        ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = '#007aff';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      // Gradient fill under curve
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(0, 122, 255, 0.35)');
+      grad.addColorStop(1, 'rgba(0, 122, 255, 0.02)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+    drawWave();
+
+    // 6. REAL-TIME DATA TICK
+    let baseCpu = 50.4;
+    function tickTelemetry() {
+      const delta = (Math.random() * 4 - 2);
+      baseCpu = Math.min(85, Math.max(20, Math.round((baseCpu + delta) * 10) / 10));
+      document.getElementById('cpuPercentVal').textContent = `${baseCpu.toFixed(1)}%`;
+      
+      wavePoints.shift();
+      wavePoints.push(Math.round(baseCpu));
+      drawWave();
+
+      // Update core capsules slightly
+      for (let i = 0; i < 8; i++) {
+        const cVal = Math.min(95, Math.max(15, Math.round(baseCpu * (0.6 + Math.random() * 0.8))));
+        document.getElementById(`cVal${i}`).textContent = cVal;
+        document.getElementById(`cBar${i}`).style.height = `${cVal}%`;
+      }
+    }
+    setInterval(tickTelemetry, 2200);
+
+    // 7. FAN CONTROLS & LINKED MODE
+    const f1Slider = document.getElementById('fan1Slider');
+    const f2Slider = document.getElementById('fan2Slider');
+    const linkFansBtn = document.getElementById('linkFansBtn');
+    let fansLinked = false;
+
+    linkFansBtn.addEventListener('click', () => {
+      fansLinked = !fansLinked;
+      linkFansBtn.classList.toggle('linked', fansLinked);
+    });
+
+    f1Slider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('f1Tgt').textContent = val.toLocaleString();
+      document.getElementById('f1Cur').textContent = val.toLocaleString();
+      document.getElementById('fan1Box').textContent = `${val} rpm`;
+      if (fansLinked) {
+        f2Slider.value = Math.min(6241, val);
+        document.getElementById('f2Tgt').textContent = f2Slider.value.toLocaleString();
+        document.getElementById('f2Cur').textContent = f2Slider.value.toLocaleString();
+        document.getElementById('fan2Box').textContent = `${f2Slider.value} rpm`;
+      }
+    });
+
+    f2Slider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById('f2Tgt').textContent = val.toLocaleString();
+      document.getElementById('f2Cur').textContent = val.toLocaleString();
+      document.getElementById('fan2Box').textContent = `${val} rpm`;
+      if (fansLinked) {
+        f1Slider.value = Math.min(5779, val);
+        document.getElementById('f1Tgt').textContent = f1Slider.value.toLocaleString();
+        document.getElementById('f1Cur').textContent = f1Slider.value.toLocaleString();
+        document.getElementById('fan1Box').textContent = `${f1Slider.value} rpm`;
+      }
+    });
+
+    // Reset button
+    document.getElementById('resetFansBtn').addEventListener('click', () => {
+      f1Slider.value = 5789;
+      f2Slider.value = 6275;
+      document.getElementById('f1Cur').textContent = "5,789";
+      document.getElementById('f2Cur').textContent = "6,275";
+      document.getElementById('fan1Box').textContent = "5789 rpm";
+      document.getElementById('fan2Box').textContent = "6275 rpm";
+      document.getElementById('fan1AutoBtn').classList.add('active');
+      document.getElementById('fan1ManualBtn').classList.remove('active');
+      document.getElementById('fan2AutoBtn').classList.add('active');
+      document.getElementById('fan2ManualBtn').classList.remove('active');
+    });
+
+    // Auto / Manual buttons
+    document.getElementById('fan1ManualBtn').addEventListener('click', () => {
+      document.getElementById('fan1ManualBtn').classList.add('active');
+      document.getElementById('fan1AutoBtn').classList.remove('active');
+    });
+    document.getElementById('fan1AutoBtn').addEventListener('click', () => {
+      document.getElementById('fan1AutoBtn').classList.add('active');
+      document.getElementById('fan1ManualBtn').classList.remove('active');
+    });
+    document.getElementById('fan2ManualBtn').addEventListener('click', () => {
+      document.getElementById('fan2ManualBtn').classList.add('active');
+      document.getElementById('fan2AutoBtn').classList.remove('active');
+    });
+    document.getElementById('fan2AutoBtn').addEventListener('click', () => {
+      document.getElementById('fan2AutoBtn').classList.add('active');
+      document.getElementById('fan2ManualBtn').classList.remove('active');
+    });
+
+    // 8. DISPLAY TAB: LID TOGGLE
+    const lidToggleSwitch = document.getElementById('lidToggleSwitch');
+    const lidStatusSubtext = document.getElementById('lidStatusSubtext');
+    lidToggleSwitch.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        lidStatusSubtext.textContent = "Closing the lid keeps the Mac awake (pmset disablesleep 1).";
+        lidStatusSubtext.style.color = "var(--apple-green)";
+      } else {
+        lidStatusSubtext.textContent = "Closing the lid sleeps the Mac.";
+        lidStatusSubtext.style.color = "#808695";
+      }
+    });
+
+    // 9. KEYBOARD TAB: CLEANER LOCK
+    const keyboardLockToggle = document.getElementById('keyboardLockToggle');
+    const kbLockFeedback = document.getElementById('kbLockFeedback');
+    const blockedKeyCount = document.getElementById('blockedKeyCount');
+    let isLocked = false;
+    let blockedCount = 0;
+
+    keyboardLockToggle.addEventListener('change', (e) => {
+      isLocked = e.target.checked;
+      kbLockFeedback.style.display = isLocked ? 'block' : 'none';
+      if (isLocked) {
+        blockedCount = 0;
+        blockedKeyCount.textContent = '0';
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (isLocked) {
+        if (e.key !== 'F12' && !e.metaKey) {
+          e.preventDefault();
+        }
+        blockedCount++;
+        blockedKeyCount.textContent = blockedCount;
+      }
+    });
+
+    // 10. CLI TERMINAL SCRIPTS
+    const CLI_SCRIPTS = {
+      'test': `<span class="term-prompt">$</span> swift run SentryBar --test
+<span class="term-dim">[INFO] Initializing SentryBar self-test diagnostics...</span>
+<span class="term-cyan">[CPU]</span> Mach host statistics: 8 cores online (4 Performance, 4 Efficiency)
+<span class="term-cyan">[SMC]</span> SMCKeyData connection opened via IOConnectCallStructMethod (80-byte wire struct)
+<span class="term-cyan">[SMC]</span> SMC key 'FNum': 2 fans detected
+<span class="term-cyan">[SMC]</span> Fan 1: 5,789 RPM | Target: 5,789 RPM | Max: 5,779 RPM
+<span class="term-cyan">[SMC]</span> Fan 2: 6,275 RPM | Target: 6,244 RPM | Max: 6,241 RPM
+<span class="term-cyan">[TEMP]</span> CPU Core cluster [Tp09..Tp0c]: 75.0°C (OK)
+<span class="term-cyan">[TEMP]</span> GPU Core [Tg05]: 73.0°C (OK)
+<span class="term-cyan">[BAT]</span> AppleSmartBattery: 81% health, 260 cycles, Charging: Yes (18%)
+<span class="term-success">✔ ALL HARDWARE SENSORS PASSED CLI AUDIT</span>`,
+
+      'fan-test': `<span class="term-prompt">$</span> swift run SentryBar --fan-test
+<span class="term-dim">[INFO] Initiating privileged FanHelper roundtrip test...</span>
+<span class="term-warn">[AUTH] Requesting one-time administrator authorization via osascript...</span>
+<span class="term-dim">[SOCKET] Connecting to /tmp/com.sentrybar.fanhelper.sock...</span>
+<span class="term-cyan">[IPC TX]</span> CMD: TARGET 0 5789
+<span class="term-success">[IPC RX]</span> OK target_set fan=0 rpm=5789
+<span class="term-dim">[WAIT]</span> Validating tachometer response...
+<span class="term-cyan">[IPC TX]</span> CMD: RESET
+<span class="term-success">[IPC RX]</span> OK auto_restored
+<span class="term-success">✔ FAN HELPER PRIVILEGE & SOCKET IPC VERIFIED</span>`,
+
+      'ax-check': `<span class="term-prompt">$</span> ./dist/SentryBar.app/Contents/MacOS/SentryBar --ax-check
+<span class="term-dim">[INFO] Auditing macOS TCC permissions and tap capabilities...</span>
+<span class="term-cyan">[TCC-AX]</span> AXIsProcessTrusted() -> <strong class="term-success">true</strong>
+<span class="term-cyan">[TCC-IM]</span> InputMonitoringDetector (method 1: listenOnly tap) -> <strong class="term-success">true</strong>
+<span class="term-cyan">[PROBE]</span> Executing ground-truth probeBlockingTap() (defaultTap, HID-level)...
+<span class="term-success">[PROBE]</span> CGEvent.tapCreate succeeded! (MachPort valid)
+<span class="term-dim">[PROBE]</span> Immediate test tap invalidated safely.
+<span class="term-success">✔ PROCESS PRIVILEGES FULLY TRUSTED (No relaunch needed)</span>`,
+
+      'make-app': `<span class="term-prompt">$</span> ./scripts/make-app.sh
+<span class="term-dim">[1/5] Building release executables (SentryBar & FanHelper)...</span>
+<span class="term-cyan">[SPM]</span> swift build -c release --disable-sandbox
+<span class="term-dim">[2/5] Creating dist/SentryBar.app bundle structure...</span>
+<span class="term-dim">[3/5] Installing FanHelper into Contents/MacOS/helpers/...</span>
+<span class="term-dim">[4/5] Stripping quarantine: xattr -cr dist/SentryBar.app</span>
+<span class="term-dim">[5/5] Codesigning with designated requirement (DR identifier-only)...</span>
+<span class="term-cyan">[SIGN]</span> codesign --force --sign - --identifier local.sysmon.SentryBar --deep dist/SentryBar.app
+<span class="term-success">✔ SUCCESS: dist/SentryBar.app ready. Survives rebuild TCC grants!</span>`
+    };
+
+    const termTabs = document.querySelectorAll('.term-tab');
+    const termOutput = document.getElementById('termOutput');
+    const copyTermCmd = document.getElementById('copyTermCmd');
+    let currentCmd = 'test';
+
+    function loadTermCmd(cmd) {
+      currentCmd = cmd;
+      termOutput.innerHTML = CLI_SCRIPTS[cmd];
+    }
+    termTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        termTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        loadTermCmd(tab.dataset.cmd);
+      });
+    });
+    loadTermCmd('test');
+
+    copyTermCmd.addEventListener('click', () => {
+      const map = {
+        'test': 'swift run SentryBar --test',
+        'fan-test': 'swift run SentryBar --fan-test',
+        'ax-check': './dist/SentryBar.app/Contents/MacOS/SentryBar --ax-check',
+        'make-app': './scripts/make-app.sh'
+      };
+      navigator.clipboard.writeText(map[currentCmd] || 'swift run SentryBar');
+      copyTermCmd.innerHTML = '<span>✅ Copied to Clipboard!</span>';
+      setTimeout(() => { copyTermCmd.innerHTML = '<span>📋 Copy CLI Command</span>'; }, 2000);
+    });
+
+    // 11. THEME TOGGLE
+    const themeBtn = document.getElementById('themeBtn');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeText = document.getElementById('themeText');
+    let theme = 'dark';
+    themeBtn.addEventListener('click', () => {
+      theme = theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+      themeText.textContent = theme === 'light' ? 'Dark' : 'Light';
+    });
+  </script>
+</body>
+</html>
