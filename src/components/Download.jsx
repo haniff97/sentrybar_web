@@ -27,7 +27,7 @@ const Download = () => {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <a href="/SentryBar.dmg" download className="btn btn-primary">
+        <a href="./SentryBar.dmg" download className="btn btn-primary">
           <span> Download SentryBar.dmg</span>
           <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>(2.1 MB)</span>
         </a>

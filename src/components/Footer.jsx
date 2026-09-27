@@ -4,7 +4,7 @@ const Footer = () => {
   return (
     <footer>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
-        <img src="/logo.png" alt="SentryBar Logo" style={{ width: '24px', height: '24px', borderRadius: '6px' }} />
+        <img src="./logo.png" alt="SentryBar Logo" style={{ width: '24px', height: '24px', borderRadius: '6px' }} />
         <span style={{ fontWeight: 700, color: '#fff' }}>SentryBar</span>
         <span style={{ color: 'var(--text-muted)' }}>— Open Source under MIT License</span>
       </div>

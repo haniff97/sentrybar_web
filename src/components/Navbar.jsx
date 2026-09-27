@@ -5,7 +5,7 @@ const Navbar = () => {
     <header className="site-nav">
       <nav className="nav-inner">
         <a href="#" className="nav-brand">
-          <img src="/logo.png" alt="SentryBar App Icon" className="brand-logo-img" />
+          <img src="./logo.png" alt="SentryBar App Icon" className="brand-logo-img" />
           <span>SentryBar</span>
           <span className="version-pill">macOS 26 & Sequoia</span>
         </a>
@@ -22,7 +22,7 @@ const Navbar = () => {
           <a href="https://github.com/haniff97/SentryBar" target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
             <span>★</span> <span>GitHub</span>
           </a>
-          <a href="/SentryBar.dmg" download className="btn btn-primary btn-sm">
+          <a href="./SentryBar.dmg" download className="btn btn-primary btn-sm">
             <span></span> <span>Download DMG</span>
           </a>
         </div>

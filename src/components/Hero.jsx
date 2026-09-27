@@ -19,7 +19,7 @@ const Hero = () => {
       </p>
 
       <div className="hero-cta">
-        <a href="/SentryBar.dmg" download className="btn btn-primary">
+        <a href="./SentryBar.dmg" download className="btn btn-primary">
           <span> Download SentryBar.dmg</span>
           <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>(2.1 MB)</span>
         </a>
